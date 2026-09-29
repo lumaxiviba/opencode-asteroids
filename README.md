@@ -24,11 +24,12 @@ Luego visita `http://localhost:3000`.
 
 ## Controles
 
-| Tecla     | Acción     |
-| --------- | ---------- |
-| `←` `→`   | Rotar nave |
-| `↑`       | Propulsar  |
-| `Espacio` | Disparar   |
+| Tecla     | Acción                  |
+| --------- | ----------------------- |
+| `←` `→`   | Rotar nave              |
+| `↑`       | Propulsar               |
+| `Espacio` | Disparar                |
+| `C`       | Cambiar skin de la nave |
 
 ## Puntuación
 
@@ -42,6 +43,10 @@ Luego visita `http://localhost:3000`.
 ## Características
 
 - 3 vidas con invencibilidad temporal al reaparecer (parpadeo)
+- Power-up de velocidad (V): duplica el empuje de la nave durante 5 s
+- Power-up de escudo (E): destruye los asteroides que tocan la nave durante 8 s
+- Power-up de triple disparo (T): dispara 3 balas en abanico durante 5 s
 - Asteroides se parten en fragmentos más pequeños al ser destruidos
 - Partículas de explosión al destruir asteroides
 - Estrella fugaz: asteroide especial muy rápido que desaparece con el tiempo (200 puntos)
+- 4 skins de nave (clásica, delta, cohete y caza): cambia con `C`; la elección se recuerda entre sesiones

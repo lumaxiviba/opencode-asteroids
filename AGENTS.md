@@ -14,6 +14,7 @@ Static, vanilla-JS game — no build, bundler, dependencies, tests, lint, or CI.
 - `RADII`, `SPEEDS`, `POINTS` are lookup tables indexed by asteroid size 1–3 (index 0 unused); smaller asteroid = more points.
 - Input: `keys` (held) vs `justPressed` (single-frame) — use `justPressed`/`pressed()` for one-shot actions, `keys` for held controls (rotate/thrust).
 - Space is toroidal: all entities wrap via `wrap()`; don't add wall-collision behavior.
+- Ship skins: `SKINS` lookup (`paths`/`nose`/`flameX`/`flameW` each); cycled with C, persisted to localStorage via `loadSkin`/`saveSkin`. All skins share collision radius 12; skin names/UI are Spanish.
 
 ## Conventions
 

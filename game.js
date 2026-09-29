@@ -155,6 +155,71 @@ class ShootingStar extends Asteroid {
   }
 }
 
+// ── Skins de nave ─────────────────────────────────────────────────────────────
+// Cada skin define paths (polilíneas cerradas, nariz hacia +X), nose (spawn de
+// balas) y flameX/flameW (base de la llama). Radio de colisión común: 12.
+const SKINS = [
+  {
+    name: 'CLÁSICA',
+    nose: 21, flameX: -8, flameW: 4,
+    paths: [
+      [[20, 0], [-12, -9], [-7, 0], [-12, 9]],
+    ],
+  },
+  {
+    name: 'DELTA',
+    nose: 24, flameX: -9, flameW: 4,
+    paths: [
+      [[23, 0], [-14, -13], [-8, 0], [-14, 13]],
+      [[9, 0], [3, -3.5], [0, 0], [3, 3.5]],   // cabina
+    ],
+  },
+  {
+    name: 'COHETE',
+    nose: 18, flameX: -12, flameW: 4.5,
+    paths: [
+      [[17, 0], [8, -5], [-10, -5], [-10, 5], [8, 5]],
+      [[-4, -5], [-15, -14], [-15, -5]],      // aleta superior
+      [[-4, 5], [-15, 14], [-15, 5]],         // aleta inferior
+      [[6, 0], [2, -3], [-1, 0], [2, 3]],     // ventana
+    ],
+  },
+  {
+    name: 'CAZA',
+    nose: 17, flameX: -6, flameW: 3.5,
+    paths: [
+      [[16, 0], [2, -13], [-10, -13], [-5, -3], [-5, 3], [-10, 13], [2, 13]],
+      [[8, 0], [4, -3], [1, 0], [4, 3]],      // cabina
+    ],
+  },
+];
+
+function loadSkin() {
+  try {
+    const i = Number(localStorage.getItem('asteroids-skin'));
+    return Number.isInteger(i) && i >= 0 && i < SKINS.length ? i : 0;
+  } catch { return 0; }
+}
+
+function saveSkin() {
+  try { localStorage.setItem('asteroids-skin', String(skinIndex)); } catch {}
+}
+
+let skinIndex = loadSkin();
+let skinMsgTimer = 0;
+const currentSkin = () => SKINS[skinIndex];
+
+// Traza los paths de una skin (transformación ya aplicada por el llamador)
+function strokeSkinPaths(skin) {
+  ctx.beginPath();
+  for (const path of skin.paths) {
+    ctx.moveTo(path[0][0], path[0][1]);
+    for (let i = 1; i < path.length; i++) ctx.lineTo(path[i][0], path[i][1]);
+    ctx.closePath();
+  }
+  ctx.stroke();
+}
+
 // ── Ship ──────────────────────────────────────────────────────────────────────
 class Ship {
   constructor() { this.reset(); }
@@ -176,7 +241,9 @@ class Ship {
     if (this.dead) return;
     if (this.invincible    > 0) this.invincible    -= dt;
     if (this.shootCooldown > 0) this.shootCooldown -= dt;
-    if (speedTimer > 0) speedTimer -= dt;
+    if (speedTimer  > 0) speedTimer  -= dt;
+    if (shieldTimer > 0) shieldTimer -= dt;
+    if (tripleTimer > 0) tripleTimer -= dt;
 
     const ROT   = 3.5;   // rad/s
     const THRUST = 260 * (speedTimer > 0 ? 2 : 1);  // px/s² (x2 con powerup)
@@ -200,10 +267,18 @@ class Ship {
   tryShoot() {
     if (this.shootCooldown > 0 || this.dead) return [];
     this.shootCooldown = 0.2;
-    const NOSE = 21;
+    const NOSE = currentSkin().nose;
     const ox = this.x + Math.cos(this.angle) * NOSE;
     const oy = this.y + Math.sin(this.angle) * NOSE;
-    return [new Bullet(ox, oy, this.angle)];
+    // Triple disparo: 3 balas en abanico alrededor de la línea de tiro
+    const SPREAD = 0.2;  // rad entre balas
+    const count = tripleTimer > 0 ? 3 : 1;
+    const shots = [];
+    for (let i = 0; i < count; i++) {
+      const a = this.angle + (i - (count - 1) / 2) * SPREAD;
+      shots.push(new Bullet(ox, oy, a));
+    }
+    return shots;
   }
 
   draw() {
@@ -218,22 +293,26 @@ class Ship {
     ctx.lineWidth   = 1.5;
     ctx.lineJoin    = 'round';
 
-    // Silueta clásica: triángulo con muesca trasera
-    ctx.beginPath();
-    ctx.moveTo( 20,  0);   // nariz
-    ctx.lineTo(-12, -9);   // ala izquierda
-    ctx.lineTo( -7,  0);   // muesca trasera
-    ctx.lineTo(-12,  9);   // ala derecha
-    ctx.closePath();
-    ctx.stroke();
+    // Silueta según la skin activa
+    const skin = currentSkin();
+    strokeSkinPaths(skin);
 
     // Llama del propulsor
     if (this.thrusting && Math.random() > 0.35) {
       ctx.beginPath();
-      ctx.moveTo(-8, -4);
-      ctx.lineTo(-8 - rand(6, 14), 0);
-      ctx.lineTo(-8,  4);
+      ctx.moveTo(skin.flameX, -skin.flameW);
+      ctx.lineTo(skin.flameX - rand(6, 14), 0);
+      ctx.lineTo(skin.flameX,  skin.flameW);
       ctx.strokeStyle = 'rgba(255, 130, 0, 0.85)';
+      ctx.stroke();
+    }
+
+    // Escudo activo: círculo alrededor de la nave, parpadea al expirar
+    if (shieldTimer > 0 && !(shieldTimer < 3 && Math.floor(shieldTimer * 8) % 2 === 0)) {
+      ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+      ctx.lineWidth   = 1.5;
+      ctx.beginPath();
+      ctx.arc(0, 0, 24, 0, Math.PI * 2);
       ctx.stroke();
     }
 
@@ -273,11 +352,12 @@ class Particle {
   }
 }
 
-// ── Powerup (velocidad) ───────────────────────────────────────────────────────
+// ── Powerups ('V' velocidad, 'E' escudo, 'T' triple disparo) ───────────────────
 class Powerup {
-  constructor(x, y) {
+  constructor(x, y, kind = 'V') {
     this.x = x;
     this.y = y;
+    this.kind = kind;
     const angle = rand(0, Math.PI * 2);
     const speed = rand(20, 40);
     this.vx = Math.cos(angle) * speed;
@@ -307,7 +387,7 @@ class Powerup {
     ctx.font        = 'bold 12px monospace';
     ctx.textAlign   = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText('V', this.x, this.y);
+    ctx.fillText(this.kind, this.x, this.y);
     ctx.restore();
   }
 }
@@ -317,8 +397,10 @@ let ship, bullets, asteroids, particles, powerups;
 let score, lives, level;
 let state;      // 'playing' | 'dead' | 'gameover'
 let deadTimer;
-let speedTimer; // segundos restantes del powerup de velocidad
-let starTimer;  // cuenta atrás para la próxima estrella fugaz
+let speedTimer;  // segundos restantes del powerup de velocidad
+let shieldTimer; // segundos restantes del powerup de escudo
+let tripleTimer; // segundos restantes del powerup de triple disparo
+let starTimer;   // cuenta atrás para la próxima estrella fugaz
 
 function spawnAsteroids(count) {
   const SAFE_DIST = 130;
@@ -342,8 +424,11 @@ function initGame() {
   lives  = 3;
   level  = 1;
   state  = 'playing';
-  speedTimer = 0;
-  starTimer  = rand(6, 10);
+  speedTimer   = 0;
+  shieldTimer  = 0;
+  tripleTimer  = 0;
+  skinMsgTimer = 2;
+  starTimer    = rand(6, 10);
   spawnAsteroids(4);
 }
 
@@ -353,6 +438,7 @@ function nextLevel() {
   particles = [];
   powerups  = [];
   ship.reset();
+  shieldTimer = 0;
   starTimer = rand(6, 10);
   spawnAsteroids(3 + level);
 }
@@ -375,6 +461,14 @@ function killShip() {
 
 // ── Update ────────────────────────────────────────────────────────────────────
 function update(dt) {
+  // Cambio de skin con C (disponible en cualquier estado)
+  if (pressed('KeyC')) {
+    skinIndex = (skinIndex + 1) % SKINS.length;
+    saveSkin();
+    skinMsgTimer = 1.5;
+  }
+  if (skinMsgTimer > 0) skinMsgTimer -= dt;
+
   if (state === 'gameover') {
     if (pressed('Space')) initGame();
     particles.forEach(p => p.update(dt));
@@ -430,7 +524,9 @@ function update(dt) {
         score += a.points;
         explode(a.x, a.y, a.size * 5);
         newAsteroids.push(...a.split());
-        if (Math.random() < 0.15) powerups.push(new Powerup(a.x, a.y));
+        // 15% de drop repartido al azar entre V, E y T
+        if (Math.random() < 0.15)
+          powerups.push(new Powerup(a.x, a.y, ['V', 'E', 'T'][randInt(0, 2)]));
       }
     }
   }
@@ -441,7 +537,9 @@ function update(dt) {
   for (const p of powerups) {
     if (dist(ship, p) < ship.radius + p.radius) {
       p.dead = true;
-      speedTimer = 5;
+      if (p.kind === 'E')      shieldTimer = 8;
+      else if (p.kind === 'T') tripleTimer = 5;
+      else                     speedTimer  = 5;
       explode(p.x, p.y, 4);
     }
   }
@@ -449,12 +547,21 @@ function update(dt) {
 
   // Nave vs asteroide
   if (ship.invincible <= 0) {
+    const shieldSplits = [];
     for (const a of asteroids) {
       if (dist(ship, a) < ship.radius + a.radius * 0.82) {
-        killShip();
-        break;
+        if (shieldTimer > 0) {
+          // El escudo destruye el asteroide (sin puntos)
+          a.dead = true;
+          explode(a.x, a.y, a.size * 5);
+          shieldSplits.push(...a.split());
+        } else {
+          killShip();
+          break;
+        }
       }
     }
+    asteroids = asteroids.filter(a => !a.dead).concat(shieldSplits);
   }
 
   // Nivel completado
@@ -466,16 +573,11 @@ function drawLifeIcon(x, y) {
   ctx.save();
   ctx.translate(x, y);
   ctx.rotate(-Math.PI / 2);
+  ctx.scale(0.5, 0.5);
   ctx.strokeStyle = '#fff';
-  ctx.lineWidth   = 1.2;
+  ctx.lineWidth   = 2.4;   // 1.2 efectivo tras el scale
   ctx.lineJoin    = 'round';
-  ctx.beginPath();
-  ctx.moveTo( 9,  0);
-  ctx.lineTo(-6, -5);
-  ctx.lineTo(-3,  0);
-  ctx.lineTo(-6,  5);
-  ctx.closePath();
-  ctx.stroke();
+  strokeSkinPaths(currentSkin());
   ctx.restore();
 }
 
@@ -485,14 +587,33 @@ function drawHUD() {
 
   ctx.textAlign = 'left';
   ctx.fillText(`SCORE  ${score}`, 14, 26);
-  if (speedTimer > 0)
-    ctx.fillText(`VELOCIDAD x2  ${speedTimer.toFixed(1)}s`, 14, 48);
+  let hudRow = 48;
+  if (speedTimer > 0) {
+    ctx.fillText(`VELOCIDAD x2  ${speedTimer.toFixed(1)}s`, 14, hudRow);
+    hudRow += 22;
+  }
+  if (shieldTimer > 0) {
+    ctx.fillText(`ESCUDO  ${shieldTimer.toFixed(1)}s`, 14, hudRow);
+    hudRow += 22;
+  }
+  if (tripleTimer > 0) {
+    ctx.fillText(`TRIPLE DISPARO  ${tripleTimer.toFixed(1)}s`, 14, hudRow);
+    hudRow += 22;
+  }
 
   ctx.textAlign = 'center';
   ctx.fillText(`NIVEL ${level}`, W / 2, 26);
 
   for (let i = 0; i < lives; i++)
     drawLifeIcon(W - 16 - i * 22, 18);
+
+  // Aviso temporal de skin al cambiar con C
+  if (skinMsgTimer > 0) {
+    ctx.textAlign = 'center';
+    ctx.font = '14px monospace';
+    ctx.fillStyle = `rgba(255,255,255,${Math.min(1, skinMsgTimer * 2).toFixed(2)})`;
+    ctx.fillText(`SKIN: ${currentSkin().name} — C PARA CAMBIAR`, W / 2, H - 22);
+  }
 
 }
 
